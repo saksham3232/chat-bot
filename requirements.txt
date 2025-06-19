@@ -1,9 +1,0 @@
-streamlit
-streamlit-oauth==0.1.14
-firebase-admin
-python-dotenv
-groq
-google-auth
-pyrebase
-google-cloud-firestore
-streamlit-cookies-manager
