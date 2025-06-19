@@ -1,5 +1,4 @@
 import streamlit as st
-import json
 from streamlit_oauth import OAuth2Component
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
@@ -12,11 +11,10 @@ from firebase_admin import credentials, firestore
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 client = Groq(api_key=GROQ_API_KEY)
 
-# === Firebase ===
-if "firebase_app" not in st.session_state:
+# === Firebase Initialization (Safe Check) ===
+if not firebase_admin._apps:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
-    st.session_state.firebase_app = True
 
 db = firestore.client()
 
@@ -30,7 +28,6 @@ oauth = OAuth2Component(
     client_secret=GOOGLE_CLIENT_SECRET,
     authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
     token_endpoint="https://oauth2.googleapis.com/token",
-    revoke_endpoint="https://oauth2.googleapis.com/revoke",
     scope="openid email profile",
     redirect_uri=REDIRECT_URI,
 )
