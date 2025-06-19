@@ -1,13 +1,14 @@
 import streamlit as st
-from streamlit_oauth import OAuth2Component
+import streamlit.components.v1 as components
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from datetime import datetime
 from groq import Groq
 import firebase_admin
 from firebase_admin import credentials, firestore
+from streamlit_oauth import OAuth2Component
 
-# === Load from Streamlit Secrets ===
+# === Load Secrets ===
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -18,7 +19,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# === OAuth Setup ===
+# === Google OAuth Setup ===
 GOOGLE_CLIENT_ID = st.secrets["google_oauth"]["client_id"]
 GOOGLE_CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
 REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
@@ -30,55 +31,9 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
-# === Login State Management ===
+# === Session Initialization ===
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
-
-# === Enforce Login-Only View ===
-if st.session_state.user_email is None:
-    st.set_page_config(page_title="Login", page_icon="🔐", layout="centered")
-    st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        result = oauth.authorize_button(
-            "Login with Google",
-            redirect_uri=REDIRECT_URI,
-            scope="openid email profile"
-        )
-
-    if result and "token" in result:
-        try:
-            idinfo = id_token.verify_oauth2_token(
-                result["token"]["id_token"], grequests.Request(), GOOGLE_CLIENT_ID
-            )
-            st.session_state.user_email = idinfo["email"]
-            st.rerun()
-        except Exception as e:
-            st.error(f"Google Login failed: {e}")
-    st.stop()
-
-# === After Login ===
-st.set_page_config(page_title="Chatbot", page_icon="🤖")
-st.title("🤖 Chatbot")
-
-col1, col2, col3 = st.columns([1, 1.5, 1])
-with col2:
-    if st.button("➕ Start New Chat"):
-        st.session_state.messages = []
-        st.session_state.current_chat_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        st.session_state.is_new_chat = True
-        st.session_state.edit_index = -1
-        st.rerun()
-
-st.sidebar.success(f"Logged in as {st.session_state.user_email}")
-if st.sidebar.button("Logout"):
-    st.session_state.clear()
-    st.rerun()
-
-# === Chat Session Initialization ===
-username = st.session_state.user_email
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_history" not in st.session_state:
@@ -92,6 +47,47 @@ if "edit_index" not in st.session_state:
 if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = False
 
+# === Login Page ===
+if st.session_state.user_email is None:
+    st.set_page_config(page_title="Login", layout="centered")
+    st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        result = oauth.authorize_button(
+            "Login with Google",
+            redirect_uri=REDIRECT_URI,
+            scope="openid email profile"
+        )
+
+    if result and "token" in result:
+        try:
+            idinfo = id_token.verify_oauth2_token(result["token"]["id_token"], grequests.Request(), GOOGLE_CLIENT_ID)
+            st.session_state.user_email = idinfo["email"]
+            st.rerun()
+        except Exception as e:
+            st.error(f"Google Login failed: {e}")
+    st.stop()
+
+# === Authenticated View ===
+st.set_page_config(page_title="Chatbot", page_icon="🤖")
+st.title("🤖 Chatbot")
+
+col1, col2, col3 = st.columns([1, 1.5, 1])
+with col2:
+    if st.button("\u2795 Start New Chat"):
+        st.session_state.messages = []
+        st.session_state.current_chat_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        st.session_state.is_new_chat = True
+        st.session_state.edit_index = -1
+        st.rerun()
+
+st.sidebar.success(f"Logged in as {st.session_state.user_email}")
+if st.sidebar.button("Logout"):
+    st.session_state.clear()
+    st.rerun()
+
 # === Utility Functions ===
 def generate_chat_title(text, max_len=40):
     first_line = text.strip().split("\n")[0]
@@ -101,8 +97,8 @@ def truncate_title(title, max_len=20):
     return title if len(title) <= max_len else title[:max_len - 3] + "..."
 
 def save_chat():
-    db.collection("chats").document(f"{username}_{st.session_state.current_chat_id}").set({
-        "user": username,
+    db.collection("chats").document(f"{st.session_state.user_email}_{st.session_state.current_chat_id}").set({
+        "user": st.session_state.user_email,
         "chat_id": st.session_state.current_chat_id,
         "title": generate_chat_title(st.session_state.messages[0]["content"]),
         "messages": st.session_state.messages,
@@ -110,17 +106,16 @@ def save_chat():
     })
 
 def load_chats():
-    docs = db.collection("chats").where("user", "==", username).stream()
+    docs = db.collection("chats").where("user", "==", st.session_state.user_email).stream()
     st.session_state.chat_history = [doc.to_dict() for doc in docs]
 
 def delete_chat(chat_id):
-    db.collection("chats").document(f"{username}_{chat_id}").delete()
+    db.collection("chats").document(f"{st.session_state.user_email}_{chat_id}").delete()
 
-# === Sidebar UI ===
+# === Sidebar Options ===
 with st.sidebar:
     st.markdown("### ⚙️ Options")
     st.session_state.edit_mode = st.checkbox("✏️ Enable Edit Mode", value=st.session_state.edit_mode)
-
     st.markdown("### 🕒 Chats")
     load_chats()
     for i, chat in reversed(list(enumerate(st.session_state.chat_history))):
@@ -184,7 +179,7 @@ for i, msg in enumerate(st.session_state.messages):
         with st.chat_message("assistant"):
             st.markdown(msg["content"])
 
-# === Prompt Input ===
+# === Chat Input ===
 if prompt := st.chat_input("Type your question..."):
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})

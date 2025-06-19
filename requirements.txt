@@ -4,3 +4,5 @@ firebase-admin
 python-dotenv
 groq
 google-auth
+pyrebase
+google-cloud-firestore
