@@ -1,19 +1,13 @@
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
+import firebase_admin
+from firebase_admin import credentials, firestore
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from datetime import datetime
-from streamlit_oauth import OAuth2Component
-import firebase_admin
-from firebase_admin import credentials, firestore
 from groq import Groq
+from streamlit_oauth import OAuth2Component
 
-# --- CONFIG (Make sure these secrets exist in .streamlit/secrets.toml) ---
-GOOGLE_CLIENT_ID = st.secrets["google_oauth"]["client_id"]
-GOOGLE_CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
-REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
-
-# --- COOKIE MANAGER ---
 cookies = EncryptedCookieManager(
     prefix="",
     password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
@@ -21,23 +15,32 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-# --- LOGOUT HANDLER ---
+# LOGOUT BUTTON: Clears all user state and cookie
 if st.sidebar.button("Logout"):
-    # Remove all session state and user cookie, then rerun (goes to login page)
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     cookies["user_email"] = ""
     cookies.save()
+    st.sidebar.info(
+        "You are logged out of the app. "
+        "To completely log out of your Google account in your browser, "
+        "please close all Google tabs or click: [Google Logout](https://accounts.google.com/Logout)"
+    )
+    # Open Google logout page in a new tab (forces Google session logout)
+    js = """
+    <script>
+        window.open('https://accounts.google.com/Logout', '_blank');
+    </script>
+    """
+    st.components.v1.html(js)
     st.rerun()
 
-# --- RESTORE FROM COOKIE IF POSSIBLE ---
 if "user_email" not in st.session_state or not st.session_state.user_email:
     cookie_email = cookies.get("user_email")
     if cookie_email:
         st.session_state.user_email = cookie_email
     else:
         st.session_state.user_email = None
-
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_history" not in st.session_state:
@@ -51,7 +54,6 @@ if "edit_index" not in st.session_state:
 if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = False
 
-# --- FIREBASE / GROQ / OAUTH INIT ---
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -63,6 +65,10 @@ except ValueError:
 
 db = firestore.client()
 
+GOOGLE_CLIENT_ID = st.secrets["google_oauth"]["client_id"]
+GOOGLE_CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
+REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
+
 oauth = OAuth2Component(
     client_id=GOOGLE_CLIENT_ID,
     client_secret=GOOGLE_CLIENT_SECRET,
@@ -70,7 +76,6 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
-# --- UTILITY FUNCTIONS ---
 def generate_chat_title(text, max_len=40):
     first_line = text.strip().split("\n")[0]
     return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
@@ -97,10 +102,10 @@ def delete_chat(chat_id):
     doc_id = f"{st.session_state.user_email}_{chat_id}"
     db.collection("chats").document(doc_id).delete()
 
-# === LOGIN PAGE ===
-if not st.session_state.user_email:
+if st.session_state.user_email is None:
     st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
+
     st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -110,6 +115,7 @@ if not st.session_state.user_email:
             redirect_uri=REDIRECT_URI,
             scope="openid email profile"
         )
+
     if result and "token" in result:
         try:
             idinfo = id_token.verify_oauth2_token(result["token"]["id_token"], grequests.Request(), GOOGLE_CLIENT_ID)
@@ -121,10 +127,9 @@ if not st.session_state.user_email:
             st.error(f"Google Login failed: {e}")
     st.stop()
 
-# === MAIN APP PAGE ===
 st.set_page_config(page_title="Chatbot", page_icon="🤖")
+
 st.title("🤖 Chatbot")
-st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 
 col1, col2, col3 = st.columns([1, 1.5, 1])
 with col2:
@@ -134,6 +139,8 @@ with col2:
         st.session_state.is_new_chat = True
         st.session_state.edit_index = -1
         st.rerun()
+
+st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 
 with st.sidebar:
     st.markdown("### ⚙️ Options")
