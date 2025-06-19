@@ -24,6 +24,8 @@ if st.sidebar.button("Logout"):
     # Clear cookie
     cookies["user_email"] = ""
     cookies.save()
+    # Show info to user (optional)
+    st.sidebar.info("Logged out locally. To logout from Google completely, close all Google tabs or visit https://accounts.google.com/Logout.")
     # Force rerun to show login page
     st.rerun()
 
@@ -127,6 +129,7 @@ if st.session_state.user_email is None:
 
 # === Authenticated View ===
 st.set_page_config(page_title="Chatbot", page_icon="🤖")
+
 st.title("🤖 Chatbot")
 
 col1, col2, col3 = st.columns([1, 1.5, 1])

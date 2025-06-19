@@ -31,8 +31,15 @@
         const provider = new firebase.auth.GoogleAuthProvider();
         firebase.auth().signInWithPopup(provider);
       }
+
+      function logout() {
+        firebase.auth().signOut().then(() => {
+          window.parent.postMessage({ type: 'logout' }, '*');
+        });
+      }
     </script>
 
     <button onclick="signInWithGoogle()">🔐 Sign in with Google</button>
+    <button onclick="logout()">🚪 Logout</button>
   </body>
 </html>
