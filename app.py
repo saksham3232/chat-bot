@@ -155,6 +155,12 @@ with st.sidebar:
             if st.button("🗑️", key=f"del_chat_{i}"):
                 delete_chat(chat["chat_id"])
                 st.cache_data.clear()
+                # If deleting the current chat, clear session state for main panel
+                if chat["chat_id"] == st.session_state.current_chat_id:
+                    st.session_state.messages = []
+                    st.session_state.current_chat_id = ""
+                    st.session_state.is_new_chat = True
+                    st.session_state.edit_index = -1
                 st.rerun()
 
 # === Display Messages ===
