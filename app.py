@@ -130,7 +130,8 @@ with col2:
 
 st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 if st.sidebar.button("Logout"):
-    st.session_state.clear()
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
     cookies["user_email"] = ""
     cookies.save({"user_email": {"expires": None}})
     st.rerun()
