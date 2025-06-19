@@ -131,7 +131,8 @@ def load_chats(user_email):
     return [doc.to_dict() for doc in docs]
 
 def delete_chat(chat_id):
-    db.collection("chats").document(f"{st.session_state.user_email}_{chat_id}").delete()
+    doc_id = f"{st.session_state.user_email}_{chat_id}"  # must match creation
+    db.collection("chats").document(doc_id).delete()
 
 # === Sidebar Options ===
 with st.sidebar:
@@ -151,6 +152,7 @@ with st.sidebar:
         with col2:
             if st.button("🗑️", key=f"del_chat_{i}"):
                 delete_chat(chat["chat_id"])
+                st.cache_data.clear()
                 st.rerun()
 
 # === Display Messages ===
