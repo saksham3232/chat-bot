@@ -109,7 +109,7 @@ if st.session_state.user_email is None:
             st.session_state.user_email = idinfo["email"]
             # Store session-only cookie (expires=None)
             cookies["user_email"] = idinfo["email"]
-            cookies.save({"user_email": {"expires": None}})
+            cookies.save()
             st.rerun()
         except Exception as e:
             st.error(f"Google Login failed: {e}")
@@ -133,7 +133,7 @@ if st.sidebar.button("Logout"):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     cookies["user_email"] = ""
-    cookies.save({"user_email": {"expires": None}})
+    cookies.save()
     st.rerun()
 
 # === Sidebar Options ===
