@@ -12,12 +12,13 @@ from streamlit_oauth import OAuth2Component
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
-# === Firebase Initialization (robust) ===
-if not firebase_admin._apps:
+# === Firebase Initialization (robust for Streamlit reruns) ===
+try:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
-else:
-    firebase_admin.get_app()
+except ValueError:
+    # Already initialized
+    pass
 
 db = firestore.client()
 
