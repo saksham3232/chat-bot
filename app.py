@@ -62,6 +62,33 @@ if "edit_index" not in st.session_state:
 if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = False
 
+# === Utility Functions ===
+def generate_chat_title(text, max_len=40):
+    first_line = text.strip().split("\n")[0]
+    return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
+
+def truncate_title(title, max_len=20):
+    return title if len(title) <= max_len else title[:max_len - 3] + "..."
+
+def save_chat():
+    doc_id = f"{st.session_state.user_email}_{st.session_state.current_chat_id}"
+    db.collection("chats").document(doc_id).set({
+        "user": st.session_state.user_email,
+        "chat_id": st.session_state.current_chat_id,
+        "title": generate_chat_title(st.session_state.messages[0]["content"]) if st.session_state.messages else "New Chat",
+        "messages": st.session_state.messages,
+        "updated_at": datetime.utcnow()
+    })
+
+@st.cache_data
+def load_chats(user_email):
+    docs = db.collection("chats").where("user", "==", user_email).stream()
+    return [doc.to_dict() for doc in docs]
+
+def delete_chat(chat_id):
+    doc_id = f"{st.session_state.user_email}_{chat_id}"
+    db.collection("chats").document(doc_id).delete()
+
 # === Login Page ===
 if st.session_state.user_email is None:
     st.set_page_config(page_title="Login", layout="centered")
@@ -108,37 +135,12 @@ if st.sidebar.button("Logout"):
     cookies.save({"user_email": {"expires": None}})
     st.rerun()
 
-# === Utility Functions (modern cache) ===
-def generate_chat_title(text, max_len=40):
-    first_line = text.strip().split("\n")[0]
-    return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
-
-def truncate_title(title, max_len=20):
-    return title if len(title) <= max_len else title[:max_len - 3] + "..."
-
-def save_chat():
-    db.collection("chats").document(f"{st.session_state.user_email}_{st.session_state.current_chat_id}").set({
-        "user": st.session_state.user_email,
-        "chat_id": st.session_state.current_chat_id,
-        "title": generate_chat_title(st.session_state.messages[0]["content"]),
-        "messages": st.session_state.messages,
-        "updated_at": datetime.utcnow()
-    })
-
-@st.cache_data
-def load_chats(user_email):
-    docs = db.collection("chats").where("user", "==", user_email).stream()
-    return [doc.to_dict() for doc in docs]
-
-def delete_chat(chat_id):
-    doc_id = f"{st.session_state.user_email}_{chat_id}"  # must match creation
-    db.collection("chats").document(doc_id).delete()
-
 # === Sidebar Options ===
 with st.sidebar:
     st.markdown("### ⚙️ Options")
     st.session_state.edit_mode = st.checkbox("✏️ Enable Edit Mode", value=st.session_state.edit_mode)
     st.markdown("### 🕒 Chats")
+    st.cache_data.clear()
     st.session_state.chat_history = load_chats(st.session_state.user_email)
     for i, chat in reversed(list(enumerate(st.session_state.chat_history))):
         col1, col2 = st.columns([0.8, 0.2])
