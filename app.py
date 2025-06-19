@@ -8,7 +8,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # === Load from Streamlit Secrets ===
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
 # === Firebase Initialization (Safe Check) ===
