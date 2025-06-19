@@ -130,10 +130,13 @@ with col2:
 
 st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 if st.sidebar.button("Logout"):
+    # Clear all session state
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    # Remove cookie
     cookies["user_email"] = ""
     cookies.save()
+    # Rerun to show login screen
     st.rerun()
 
 # === Sidebar Options ===
