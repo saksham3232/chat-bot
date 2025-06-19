@@ -11,7 +11,7 @@ from firebase_admin import credentials, firestore
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
-# === Firebase Initialization (Safe Check) ===
+# === Firebase Initialization ===
 if not firebase_admin._apps:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
@@ -30,12 +30,24 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
-# === Login ===
+# === Login State Management ===
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
 
+# === Enforce Login-Only View ===
 if st.session_state.user_email is None:
-    result = oauth.authorize_button("Login with Google", redirect_uri=REDIRECT_URI, scope="openid email profile")
+    st.set_page_config(page_title="Login", page_icon="🔐", layout="centered")
+    st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        result = oauth.authorize_button(
+            "Login with Google",
+            redirect_uri=REDIRECT_URI,
+            scope="openid email profile"
+        )
+
     if result and "token" in result:
         try:
             idinfo = id_token.verify_oauth2_token(
@@ -45,153 +57,157 @@ if st.session_state.user_email is None:
             st.rerun()
         except Exception as e:
             st.error(f"Google Login failed: {e}")
-else:
-    st.sidebar.success(f"Logged in as {st.session_state.user_email}")
-    if st.sidebar.button("Logout"):
-        st.session_state.clear()
+    st.stop()
+
+# === After Login ===
+st.set_page_config(page_title="Chatbot", page_icon="🤖")
+st.title("🤖 Chatbot")
+
+col1, col2, col3 = st.columns([1, 1.5, 1])
+with col2:
+    if st.button("➕ Start New Chat"):
+        st.session_state.messages = []
+        st.session_state.current_chat_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        st.session_state.is_new_chat = True
+        st.session_state.edit_index = -1
         st.rerun()
 
-    # === Chat Session Initialization ===
-    username = st.session_state.user_email
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-    if "current_chat_id" not in st.session_state:
-        st.session_state.current_chat_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    if "is_new_chat" not in st.session_state:
-        st.session_state.is_new_chat = True
-    if "edit_index" not in st.session_state:
-        st.session_state.edit_index = -1
-    if "edit_mode" not in st.session_state:
-        st.session_state.edit_mode = False
+st.sidebar.success(f"Logged in as {st.session_state.user_email}")
+if st.sidebar.button("Logout"):
+    st.session_state.clear()
+    st.rerun()
 
-    # === Utility Functions ===
-    def generate_chat_title(text, max_len=40):
-        first_line = text.strip().split("\n")[0]
-        return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
+# === Chat Session Initialization ===
+username = st.session_state.user_email
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+if "is_new_chat" not in st.session_state:
+    st.session_state.is_new_chat = True
+if "edit_index" not in st.session_state:
+    st.session_state.edit_index = -1
+if "edit_mode" not in st.session_state:
+    st.session_state.edit_mode = False
 
-    def truncate_title(title, max_len=20):
-        return title if len(title) <= max_len else title[:max_len - 3] + "..."
+# === Utility Functions ===
+def generate_chat_title(text, max_len=40):
+    first_line = text.strip().split("\n")[0]
+    return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
 
-    def save_chat():
-        db.collection("chats").document(f"{username}_{st.session_state.current_chat_id}").set({
-            "user": username,
-            "chat_id": st.session_state.current_chat_id,
-            "title": generate_chat_title(st.session_state.messages[0]["content"]),
-            "messages": st.session_state.messages,
-            "updated_at": datetime.utcnow()
-        })
+def truncate_title(title, max_len=20):
+    return title if len(title) <= max_len else title[:max_len - 3] + "..."
 
-    def load_chats():
-        docs = db.collection("chats").where("user", "==", username).stream()
-        st.session_state.chat_history = [doc.to_dict() for doc in docs]
+def save_chat():
+    db.collection("chats").document(f"{username}_{st.session_state.current_chat_id}").set({
+        "user": username,
+        "chat_id": st.session_state.current_chat_id,
+        "title": generate_chat_title(st.session_state.messages[0]["content"]),
+        "messages": st.session_state.messages,
+        "updated_at": datetime.utcnow()
+    })
 
-    def delete_chat(chat_id):
-        db.collection("chats").document(f"{username}_{chat_id}").delete()
+def load_chats():
+    docs = db.collection("chats").where("user", "==", username).stream()
+    st.session_state.chat_history = [doc.to_dict() for doc in docs]
 
-    # === UI Setup ===
-    st.set_page_config(page_title="Chatbot", page_icon="🤖")
-    st.title("🤖 Chatbot")
+def delete_chat(chat_id):
+    db.collection("chats").document(f"{username}_{chat_id}").delete()
 
-    with st.sidebar:
-        st.subheader("🛠️ Options")
-        if st.button("➕ New Chat"):
-            st.session_state.messages = []
-            st.session_state.current_chat_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            st.session_state.is_new_chat = True
-            st.session_state.edit_index = -1
-            st.rerun()
+# === Sidebar UI ===
+with st.sidebar:
+    st.markdown("### ⚙️ Options")
+    st.session_state.edit_mode = st.checkbox("✏️ Enable Edit Mode", value=st.session_state.edit_mode)
 
-        st.session_state.edit_mode = st.checkbox("Enable Edit Mode", value=st.session_state.edit_mode)
+    st.markdown("### 🕒 Chats")
+    load_chats()
+    for i, chat in reversed(list(enumerate(st.session_state.chat_history))):
+        col1, col2 = st.columns([0.8, 0.2])
+        with col1:
+            if st.button(truncate_title(chat["title"]), key=f"load_chat_{i}"):
+                st.session_state.messages = chat["messages"]
+                st.session_state.current_chat_id = chat["chat_id"]
+                st.session_state.is_new_chat = False
+                st.session_state.edit_index = -1
+                st.rerun()
+        with col2:
+            if st.button("🗑️", key=f"del_chat_{i}"):
+                delete_chat(chat["chat_id"])
+                st.rerun()
 
-        st.subheader("🕒 Chats")
-        load_chats()
-        for i, chat in reversed(list(enumerate(st.session_state.chat_history))):
-            col1, col2 = st.columns([0.8, 0.2])
+# === Display Messages ===
+for i, msg in enumerate(st.session_state.messages):
+    if msg["role"] == "user":
+        if st.session_state.edit_mode and st.session_state.edit_index == i:
+            new_input = st.text_input("Edit your message:", value=msg["content"], key=f"edit_input_{i}")
+            col1, col2 = st.columns(2)
             with col1:
-                if st.button(truncate_title(chat["title"]), key=f"load_chat_{i}"):
-                    st.session_state.messages = chat["messages"]
-                    st.session_state.current_chat_id = chat["chat_id"]
-                    st.session_state.is_new_chat = False
+                if st.button("✅ Save", key=f"save_edit_{i}"):
+                    st.session_state.messages[i]["content"] = new_input
+                    st.session_state.messages = st.session_state.messages[:i + 1]
                     st.session_state.edit_index = -1
+
+                    full_response = ""
+                    try:
+                        stream = client.chat.completions.create(
+                            model="llama3-8b-8192",
+                            messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                            stream=True
+                        )
+                        with st.chat_message("assistant"):
+                            container = st.empty()
+                            for chunk in stream:
+                                delta = chunk.choices[0].delta
+                                if delta and delta.content:
+                                    full_response += delta.content
+                                    container.markdown(full_response)
+                    except Exception as e:
+                        st.error(str(e))
+                        full_response = f"❌ Error: {e}"
+
+                    st.session_state.messages.append({"role": "assistant", "content": full_response})
+                    save_chat()
                     st.rerun()
             with col2:
-                if st.button("🗑️", key=f"del_chat_{i}"):
-                    delete_chat(chat["chat_id"])
+                if st.button("❌ Cancel", key=f"cancel_edit_{i}"):
+                    st.session_state.edit_index = -1
                     st.rerun()
-
-    # === Display Messages ===
-    for i, msg in enumerate(st.session_state.messages):
-        if msg["role"] == "user":
-            if st.session_state.edit_mode and st.session_state.edit_index == i:
-                new_input = st.text_input("Edit your message:", value=msg["content"], key=f"edit_input_{i}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("✅ Save", key=f"save_edit_{i}"):
-                        st.session_state.messages[i]["content"] = new_input
-                        st.session_state.messages = st.session_state.messages[:i + 1]
-                        st.session_state.edit_index = -1
-
-                        full_response = ""
-                        try:
-                            stream = client.chat.completions.create(
-                                model="llama3-8b-8192",
-                                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                                stream=True
-                            )
-                            with st.chat_message("assistant"):
-                                container = st.empty()
-                                for chunk in stream:
-                                    delta = chunk.choices[0].delta
-                                    if delta and delta.content:
-                                        full_response += delta.content
-                                        container.markdown(full_response)
-                        except Exception as e:
-                            st.error(str(e))
-                            full_response = f"❌ Error: {e}"
-
-                        st.session_state.messages.append({"role": "assistant", "content": full_response})
-                        save_chat()
-                        st.rerun()
-                with col2:
-                    if st.button("❌ Cancel", key=f"cancel_edit_{i}"):
-                        st.session_state.edit_index = -1
-                        st.rerun()
-            else:
-                with st.chat_message("user"):
-                    st.markdown(msg["content"])
-                    if st.session_state.edit_mode and st.button("✏️ Edit", key=f"edit_btn_{i}"):
-                        st.session_state.edit_index = i
-                        st.rerun()
         else:
-            with st.chat_message("assistant"):
+            with st.chat_message("user"):
                 st.markdown(msg["content"])
+                if st.session_state.edit_mode and st.button("✏️ Edit", key=f"edit_btn_{i}"):
+                    st.session_state.edit_index = i
+                    st.rerun()
+    else:
+        with st.chat_message("assistant"):
+            st.markdown(msg["content"])
 
-    # === Prompt Input ===
-    if prompt := st.chat_input("Type your question..."):
-        st.chat_message("user").markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
+# === Prompt Input ===
+if prompt := st.chat_input("Type your question..."):
+    st.chat_message("user").markdown(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-        full_response = ""
-        try:
-            stream = client.chat.completions.create(
-                model="llama3-8b-8192",
-                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                stream=True
-            )
-            with st.chat_message("assistant"):
-                container = st.empty()
-                for chunk in stream:
-                    delta = chunk.choices[0].delta
-                    if delta and delta.content:
-                        full_response += delta.content
-                        container.markdown(full_response)
-        except Exception as e:
-            st.error(str(e))
-            full_response = f"❌ Error: {e}"
+    full_response = ""
+    try:
+        stream = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+            stream=True
+        )
+        with st.chat_message("assistant"):
+            container = st.empty()
+            for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta and delta.content:
+                    full_response += delta.content
+                    container.markdown(full_response)
+    except Exception as e:
+        st.error(str(e))
+        full_response = f"❌ Error: {e}"
 
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
-        save_chat()
-        st.session_state.is_new_chat = False
-        st.rerun()
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    save_chat()
+    st.session_state.is_new_chat = False
+    st.rerun()
