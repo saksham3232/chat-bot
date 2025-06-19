@@ -8,6 +8,7 @@ from datetime import datetime
 from groq import Groq
 from streamlit_oauth import OAuth2Component
 
+# --- COOKIE MANAGER ---
 cookies = EncryptedCookieManager(
     prefix="",
     password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
@@ -15,26 +16,15 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-# LOGOUT BUTTON: Clears all user state and cookie
+# --- LOGOUT HANDLER ---
 if st.sidebar.button("Logout"):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     cookies["user_email"] = ""
     cookies.save()
-    st.sidebar.info(
-        "You are logged out of the app. "
-        "To completely log out of your Google account in your browser, "
-        "please close all Google tabs or click: [Google Logout](https://accounts.google.com/Logout)"
-    )
-    # Open Google logout page in a new tab (forces Google session logout)
-    js = """
-    <script>
-        window.open('https://accounts.google.com/Logout', '_blank');
-    </script>
-    """
-    st.components.v1.html(js)
     st.rerun()
 
+# --- USER SESSION INIT ---
 if "user_email" not in st.session_state or not st.session_state.user_email:
     cookie_email = cookies.get("user_email")
     if cookie_email:
@@ -54,6 +44,7 @@ if "edit_index" not in st.session_state:
 if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = False
 
+# --- FIREBASE / GROQ / OAUTH INIT ---
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -76,6 +67,7 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
+# --- UTILITY FUNCTIONS ---
 def generate_chat_title(text, max_len=40):
     first_line = text.strip().split("\n")[0]
     return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
@@ -102,10 +94,10 @@ def delete_chat(chat_id):
     doc_id = f"{st.session_state.user_email}_{chat_id}"
     db.collection("chats").document(doc_id).delete()
 
-if st.session_state.user_email is None:
+# --- LOGIN PAGE ---
+if "user_email" not in st.session_state or not st.session_state.user_email:
     st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
-
     st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -127,6 +119,7 @@ if st.session_state.user_email is None:
             st.error(f"Google Login failed: {e}")
     st.stop()
 
+# --- MAIN APP PAGE ---
 st.set_page_config(page_title="Chatbot", page_icon="🤖")
 
 st.title("🤖 Chatbot")
