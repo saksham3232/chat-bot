@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 from streamlit_oauth import OAuth2Component
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
@@ -13,7 +14,7 @@ client = Groq(api_key=GROQ_API_KEY)
 
 # === Firebase ===
 if "firebase_app" not in st.session_state:
-    cred = credentials.Certificate(st.secrets["firebase"])
+    cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
     st.session_state.firebase_app = True
 
