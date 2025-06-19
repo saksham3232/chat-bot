@@ -1,12 +1,12 @@
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
-import firebase_admin
-from firebase_admin import credentials, firestore
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from datetime import datetime
-from groq import Groq
 from streamlit_oauth import OAuth2Component
+import firebase_admin
+from firebase_admin import credentials, firestore
+from groq import Groq
 
 # --- COOKIE MANAGER ---
 cookies = EncryptedCookieManager(
@@ -18,6 +18,7 @@ if not cookies.ready():
 
 # --- LOGOUT HANDLER ---
 if st.sidebar.button("Logout"):
+    # Remove all session state and user cookie, then rerun (goes to login page)
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     cookies["user_email"] = ""
@@ -31,6 +32,7 @@ if "user_email" not in st.session_state or not st.session_state.user_email:
         st.session_state.user_email = cookie_email
     else:
         st.session_state.user_email = None
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_history" not in st.session_state:
@@ -95,7 +97,7 @@ def delete_chat(chat_id):
     db.collection("chats").document(doc_id).delete()
 
 # --- LOGIN PAGE ---
-if "user_email" not in st.session_state or not st.session_state.user_email:
+if not st.session_state.user_email:
     st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
@@ -121,8 +123,8 @@ if "user_email" not in st.session_state or not st.session_state.user_email:
 
 # --- MAIN APP PAGE ---
 st.set_page_config(page_title="Chatbot", page_icon="🤖")
-
 st.title("🤖 Chatbot")
+st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 
 col1, col2, col3 = st.columns([1, 1.5, 1])
 with col2:
@@ -132,8 +134,6 @@ with col2:
         st.session_state.is_new_chat = True
         st.session_state.edit_index = -1
         st.rerun()
-
-st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 
 with st.sidebar:
     st.markdown("### ⚙️ Options")
