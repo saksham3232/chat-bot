@@ -7,6 +7,7 @@ from groq import Groq
 import firebase_admin
 from firebase_admin import credentials, firestore
 from streamlit_oauth import OAuth2Component
+from streamlit_cookies_manager import EncryptedCookieManager  # <-- NEW IMPORT
 
 # === Load Secrets ===
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
@@ -31,9 +32,19 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
+# === Cookie Manager Initialization ===
+cookies = EncryptedCookieManager(
+    prefix="",
+    password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
+)
+cookies.ready()
+
 # === Session Initialization ===
-if "user_email" not in st.session_state:
-    st.session_state.user_email = None
+if "user_email" not in st.session_state or not st.session_state.user_email:
+    if "user_email" in cookies and cookies["user_email"]:
+        st.session_state.user_email = cookies["user_email"]
+    else:
+        st.session_state.user_email = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_history" not in st.session_state:
@@ -51,6 +62,7 @@ if "edit_mode" not in st.session_state:
 if st.session_state.user_email is None:
     st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
+
     st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -65,6 +77,7 @@ if st.session_state.user_email is None:
         try:
             idinfo = id_token.verify_oauth2_token(result["token"]["id_token"], grequests.Request(), GOOGLE_CLIENT_ID)
             st.session_state.user_email = idinfo["email"]
+            cookies["user_email"] = idinfo["email"]  # <-- STORE IN COOKIE
             st.rerun()
         except Exception as e:
             st.error(f"Google Login failed: {e}")
@@ -86,6 +99,7 @@ with col2:
 st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 if st.sidebar.button("Logout"):
     st.session_state.clear()
+    cookies["user_email"] = ""  # <-- CLEAR THE COOKIE
     st.rerun()
 
 # === Utility Functions ===

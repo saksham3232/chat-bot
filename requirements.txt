@@ -6,3 +6,4 @@ groq
 google-auth
 pyrebase
 google-cloud-firestore
+streamlit-cookies-manager
