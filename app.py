@@ -8,6 +8,11 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from groq import Groq
 
+# --- CONFIG (Make sure these secrets exist in .streamlit/secrets.toml) ---
+GOOGLE_CLIENT_ID = st.secrets["google_oauth"]["client_id"]
+GOOGLE_CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
+REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
+
 # --- COOKIE MANAGER ---
 cookies = EncryptedCookieManager(
     prefix="",
@@ -25,7 +30,7 @@ if st.sidebar.button("Logout"):
     cookies.save()
     st.rerun()
 
-# --- USER SESSION INIT ---
+# --- RESTORE FROM COOKIE IF POSSIBLE ---
 if "user_email" not in st.session_state or not st.session_state.user_email:
     cookie_email = cookies.get("user_email")
     if cookie_email:
@@ -57,10 +62,6 @@ except ValueError:
     pass
 
 db = firestore.client()
-
-GOOGLE_CLIENT_ID = st.secrets["google_oauth"]["client_id"]
-GOOGLE_CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
-REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
 
 oauth = OAuth2Component(
     client_id=GOOGLE_CLIENT_ID,
@@ -96,7 +97,7 @@ def delete_chat(chat_id):
     doc_id = f"{st.session_state.user_email}_{chat_id}"
     db.collection("chats").document(doc_id).delete()
 
-# --- LOGIN PAGE ---
+# === LOGIN PAGE ===
 if not st.session_state.user_email:
     st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
@@ -109,7 +110,6 @@ if not st.session_state.user_email:
             redirect_uri=REDIRECT_URI,
             scope="openid email profile"
         )
-
     if result and "token" in result:
         try:
             idinfo = id_token.verify_oauth2_token(result["token"]["id_token"], grequests.Request(), GOOGLE_CLIENT_ID)
@@ -121,7 +121,7 @@ if not st.session_state.user_email:
             st.error(f"Google Login failed: {e}")
     st.stop()
 
-# --- MAIN APP PAGE ---
+# === MAIN APP PAGE ===
 st.set_page_config(page_title="Chatbot", page_icon="🤖")
 st.title("🤖 Chatbot")
 st.sidebar.success(f"Logged in as {st.session_state.user_email}")
