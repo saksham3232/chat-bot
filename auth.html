@@ -1,4 +1,3 @@
-<!-- auth.html -->
 <!DOCTYPE html>
 <html>
   <head>
@@ -35,6 +34,7 @@
       function logout() {
         firebase.auth().signOut().then(() => {
           window.parent.postMessage({ type: 'logout' }, '*');
+          alert("Signed out from Firebase. If you want to sign out from Google entirely, close all Google tabs or visit https://accounts.google.com/Logout");
         });
       }
     </script>

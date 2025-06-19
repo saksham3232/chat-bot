@@ -8,28 +8,26 @@ from datetime import datetime
 from groq import Groq
 from streamlit_oauth import OAuth2Component
 
-# === Cookie Manager Initialization (robust, session-only cookies) ===
 cookies = EncryptedCookieManager(
     prefix="",
     password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
 )
 if not cookies.ready():
-    st.stop()  # Wait until cookies are ready!
+    st.stop()
 
-# === LOGOUT BUTTON: MUST BE BEFORE SESSION INIT ===
+# LOGOUT BUTTON: Clears all user state and cookie
 if st.sidebar.button("Logout"):
-    # Remove all session state
     for key in list(st.session_state.keys()):
         del st.session_state[key]
-    # Clear cookie
     cookies["user_email"] = ""
     cookies.save()
-    # Show info to user (optional)
-    st.sidebar.info("Logged out locally. To logout from Google completely, close all Google tabs or visit https://accounts.google.com/Logout.")
-    # Force rerun to show login page
+    st.sidebar.info(
+        "You are logged out of the app. "
+        "To completely log out of your Google account in your browser, "
+        "please close all Google tabs or click: [Google Logout](https://accounts.google.com/Logout)"
+    )
     st.rerun()
 
-# === Session Initialization ===
 if "user_email" not in st.session_state or not st.session_state.user_email:
     cookie_email = cookies.get("user_email")
     if cookie_email:
@@ -49,21 +47,16 @@ if "edit_index" not in st.session_state:
 if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = False
 
-# === Load Secrets ===
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
-# === Firebase Initialization (robust for Streamlit reruns) ===
 try:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
 except ValueError:
-    # Already initialized
     pass
 
 db = firestore.client()
-
-# === Google OAuth Setup ===
 GOOGLE_CLIENT_ID = st.secrets["google_oauth"]["client_id"]
 GOOGLE_CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
 REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
@@ -75,7 +68,6 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
-# === Utility Functions ===
 def generate_chat_title(text, max_len=40):
     first_line = text.strip().split("\n")[0]
     return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
@@ -102,7 +94,6 @@ def delete_chat(chat_id):
     doc_id = f"{st.session_state.user_email}_{chat_id}"
     db.collection("chats").document(doc_id).delete()
 
-# === Login Page ===
 if st.session_state.user_email is None:
     st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
@@ -127,7 +118,6 @@ if st.session_state.user_email is None:
             st.error(f"Google Login failed: {e}")
     st.stop()
 
-# === Authenticated View ===
 st.set_page_config(page_title="Chatbot", page_icon="🤖")
 
 st.title("🤖 Chatbot")
@@ -143,7 +133,6 @@ with col2:
 
 st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 
-# === Sidebar Options ===
 with st.sidebar:
     st.markdown("### ⚙️ Options")
     st.session_state.edit_mode = st.checkbox("✏️ Enable Edit Mode", value=st.session_state.edit_mode)
@@ -170,7 +159,6 @@ with st.sidebar:
                     st.session_state.edit_index = -1
                 st.rerun()
 
-# === Display Messages ===
 for i, msg in enumerate(st.session_state.messages):
     if msg["role"] == "user":
         if st.session_state.edit_mode and st.session_state.edit_index == i:
@@ -217,7 +205,6 @@ for i, msg in enumerate(st.session_state.messages):
         with st.chat_message("assistant"):
             st.markdown(msg["content"])
 
-# === Chat Input ===
 if prompt := st.chat_input("Type your question..."):
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
