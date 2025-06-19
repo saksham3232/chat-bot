@@ -107,7 +107,7 @@ if st.sidebar.button("Logout"):
     cookies.save({"user_email": {"expires": None}})
     st.rerun()
 
-# === Utility Functions (unchanged) ===
+# === Utility Functions (modern cache) ===
 def generate_chat_title(text, max_len=40):
     first_line = text.strip().split("\n")[0]
     return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
@@ -124,9 +124,10 @@ def save_chat():
         "updated_at": datetime.utcnow()
     })
 
-def load_chats():
-    docs = db.collection("chats").where("user", "==", st.session_state.user_email).stream()
-    st.session_state.chat_history = [doc.to_dict() for doc in docs]
+@st.cache_data
+def load_chats(user_email):
+    docs = db.collection("chats").where("user", "==", user_email).stream()
+    return [doc.to_dict() for doc in docs]
 
 def delete_chat(chat_id):
     db.collection("chats").document(f"{st.session_state.user_email}_{chat_id}").delete()
@@ -136,7 +137,7 @@ with st.sidebar:
     st.markdown("### ⚙️ Options")
     st.session_state.edit_mode = st.checkbox("✏️ Enable Edit Mode", value=st.session_state.edit_mode)
     st.markdown("### 🕒 Chats")
-    load_chats()
+    st.session_state.chat_history = load_chats(st.session_state.user_email)
     for i, chat in reversed(list(enumerate(st.session_state.chat_history))):
         col1, col2 = st.columns([0.8, 0.2])
         with col1:
