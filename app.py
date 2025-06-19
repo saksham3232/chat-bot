@@ -26,6 +26,13 @@ if st.sidebar.button("Logout"):
         "To completely log out of your Google account in your browser, "
         "please close all Google tabs or click: [Google Logout](https://accounts.google.com/Logout)"
     )
+    # Open Google logout page in a new tab (forces Google session logout)
+    js = """
+    <script>
+        window.open('https://accounts.google.com/Logout', '_blank');
+    </script>
+    """
+    st.components.v1.html(js)
     st.rerun()
 
 if "user_email" not in st.session_state or not st.session_state.user_email:
@@ -57,6 +64,7 @@ except ValueError:
     pass
 
 db = firestore.client()
+
 GOOGLE_CLIENT_ID = st.secrets["google_oauth"]["client_id"]
 GOOGLE_CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
 REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
@@ -97,6 +105,7 @@ def delete_chat(chat_id):
 if st.session_state.user_email is None:
     st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
+
     st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
