@@ -33,7 +33,7 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
-# === Cookie Manager Initialization (robust) ===
+# === Cookie Manager Initialization (robust, session-only cookies) ===
 cookies = EncryptedCookieManager(
     prefix="",
     password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
@@ -43,8 +43,9 @@ if not cookies.ready():
 
 # === Session Initialization ===
 if "user_email" not in st.session_state or not st.session_state.user_email:
-    if cookies.get("user_email"):
-        st.session_state.user_email = cookies["user_email"]
+    cookie_email = cookies.get("user_email")
+    if cookie_email:
+        st.session_state.user_email = cookie_email
     else:
         st.session_state.user_email = None
 if "messages" not in st.session_state:
@@ -78,7 +79,9 @@ if st.session_state.user_email is None:
         try:
             idinfo = id_token.verify_oauth2_token(result["token"]["id_token"], grequests.Request(), GOOGLE_CLIENT_ID)
             st.session_state.user_email = idinfo["email"]
-            cookies["user_email"] = idinfo["email"]  # <-- STORE IN COOKIE
+            # Store session-only cookie (expires=None)
+            cookies["user_email"] = idinfo["email"]
+            cookies.save({"user_email": {"expires": None}})
             st.rerun()
         except Exception as e:
             st.error(f"Google Login failed: {e}")
@@ -100,7 +103,8 @@ with col2:
 st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 if st.sidebar.button("Logout"):
     st.session_state.clear()
-    cookies["user_email"] = ""  # <-- CLEAR THE COOKIE
+    cookies["user_email"] = ""
+    cookies.save({"user_email": {"expires": None}})
     st.rerun()
 
 # === Utility Functions (unchanged) ===
@@ -126,8 +130,6 @@ def load_chats():
 
 def delete_chat(chat_id):
     db.collection("chats").document(f"{st.session_state.user_email}_{chat_id}").delete()
-
-# ... (rest of your app logic remains unchanged)
 
 # === Sidebar Options ===
 with st.sidebar:
