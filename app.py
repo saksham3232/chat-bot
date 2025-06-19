@@ -27,9 +27,7 @@ oauth = OAuth2Component(
     client_id=GOOGLE_CLIENT_ID,
     client_secret=GOOGLE_CLIENT_SECRET,
     authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-    token_endpoint="https://oauth2.googleapis.com/token",
-    scope="openid email profile",
-    redirect_uri=REDIRECT_URI,
+    token_endpoint="https://oauth2.googleapis.com/token"
 )
 
 # === Login ===
@@ -37,7 +35,7 @@ if "user_email" not in st.session_state:
     st.session_state.user_email = None
 
 if st.session_state.user_email is None:
-    result = oauth.authorize_button("Login with Google")
+    result = oauth.authorize_button("Login with Google", redirect_uri=REDIRECT_URI)
     if result and "token" in result:
         try:
             idinfo = id_token.verify_oauth2_token(
