@@ -1,3 +1,6 @@
 streamlit
-groq
+streamlit-oauth
+firebase-admin
 python-dotenv
+groq
+google-auth
