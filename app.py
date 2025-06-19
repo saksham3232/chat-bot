@@ -5,7 +5,8 @@ import os
 
 # Load environment variables from .env
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# Load API key from Streamlit secrets or .env
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
 
 # Initialize Groq client
 client = Groq(api_key=GROQ_API_KEY)
