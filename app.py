@@ -18,10 +18,13 @@ if not cookies.ready():
 
 # === LOGOUT BUTTON: MUST BE BEFORE SESSION INIT ===
 if st.sidebar.button("Logout"):
+    # Remove all session state
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    # Clear cookie
     cookies["user_email"] = ""
     cookies.save()
+    # Force rerun to show login page
     st.rerun()
 
 # === Session Initialization ===
