@@ -8,10 +8,6 @@ from datetime import datetime
 from groq import Groq
 from streamlit_oauth import OAuth2Component
 
-# --- PAGE CONFIG: Must come first!
-st.set_page_config(page_title="Chatbot", page_icon="🤖", layout="centered")
-
-# --- COOKIE SETUP
 cookies = EncryptedCookieManager(
     prefix="",
     password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
@@ -19,7 +15,7 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-# --- LOGOUT BUTTON
+# LOGOUT BUTTON: Clears all user state and cookie
 if st.sidebar.button("Logout"):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
@@ -30,16 +26,8 @@ if st.sidebar.button("Logout"):
         "To completely log out of your Google account in your browser, "
         "please close all Google tabs or click: [Google Logout](https://accounts.google.com/Logout)"
     )
-    # Open Google logout page in a new tab (forces Google session logout)
-    js = """
-    <script>
-        window.open('https://accounts.google.com/Logout', '_blank');
-    </script>
-    """
-    st.components.v1.html(js)
     st.rerun()
 
-# --- SESSION STATE SETUP
 if "user_email" not in st.session_state or not st.session_state.user_email:
     cookie_email = cookies.get("user_email")
     if cookie_email:
@@ -59,20 +47,16 @@ if "edit_index" not in st.session_state:
 if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = False
 
-# --- GROQ CLIENT
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- FIREBASE SETUP
 try:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
 except ValueError:
-    pass  # App already initialized
+    pass
 
 db = firestore.client()
-
-# --- GOOGLE OAUTH SETUP
 GOOGLE_CLIENT_ID = st.secrets["google_oauth"]["client_id"]
 GOOGLE_CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
 REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
@@ -84,7 +68,6 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
-# --- CHAT UTILS
 def generate_chat_title(text, max_len=40):
     first_line = text.strip().split("\n")[0]
     return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
@@ -111,10 +94,11 @@ def delete_chat(chat_id):
     doc_id = f"{st.session_state.user_email}_{chat_id}"
     db.collection("chats").document(doc_id).delete()
 
-# --- LOGIN PAGE
 if st.session_state.user_email is None:
+    st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         result = oauth.authorize_button(
@@ -122,6 +106,7 @@ if st.session_state.user_email is None:
             redirect_uri=REDIRECT_URI,
             scope="openid email profile"
         )
+
     if result and "token" in result:
         try:
             idinfo = id_token.verify_oauth2_token(result["token"]["id_token"], grequests.Request(), GOOGLE_CLIENT_ID)
@@ -133,7 +118,8 @@ if st.session_state.user_email is None:
             st.error(f"Google Login failed: {e}")
     st.stop()
 
-# --- MAIN APP UI
+st.set_page_config(page_title="Chatbot", page_icon="🤖")
+
 st.title("🤖 Chatbot")
 
 col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -173,7 +159,6 @@ with st.sidebar:
                     st.session_state.edit_index = -1
                 st.rerun()
 
-# --- MESSAGE DISPLAY AND EDIT
 for i, msg in enumerate(st.session_state.messages):
     if msg["role"] == "user":
         if st.session_state.edit_mode and st.session_state.edit_index == i:
@@ -184,6 +169,7 @@ for i, msg in enumerate(st.session_state.messages):
                     st.session_state.messages[i]["content"] = new_input
                     st.session_state.messages = st.session_state.messages[:i + 1]
                     st.session_state.edit_index = -1
+
                     full_response = ""
                     try:
                         stream = client.chat.completions.create(
@@ -201,6 +187,7 @@ for i, msg in enumerate(st.session_state.messages):
                     except Exception as e:
                         st.error(str(e))
                         full_response = f"❌ Error: {e}"
+
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
                     save_chat()
                     st.rerun()
@@ -218,10 +205,10 @@ for i, msg in enumerate(st.session_state.messages):
         with st.chat_message("assistant"):
             st.markdown(msg["content"])
 
-# --- CHAT INPUT
 if prompt := st.chat_input("Type your question..."):
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
+
     full_response = ""
     try:
         stream = client.chat.completions.create(
@@ -239,6 +226,7 @@ if prompt := st.chat_input("Type your question..."):
     except Exception as e:
         st.error(str(e))
         full_response = f"❌ Error: {e}"
+
     st.session_state.messages.append({"role": "assistant", "content": full_response})
     save_chat()
     st.session_state.is_new_chat = False
