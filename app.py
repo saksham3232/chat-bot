@@ -8,6 +8,42 @@ from datetime import datetime
 from groq import Groq
 from streamlit_oauth import OAuth2Component
 
+# === Cookie Manager Initialization (robust, session-only cookies) ===
+cookies = EncryptedCookieManager(
+    prefix="",
+    password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
+)
+if not cookies.ready():
+    st.stop()  # Wait until cookies are ready!
+
+# === LOGOUT BUTTON: MUST BE BEFORE SESSION INIT ===
+if st.sidebar.button("Logout"):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    cookies["user_email"] = ""
+    cookies.save()
+    st.rerun()
+
+# === Session Initialization ===
+if "user_email" not in st.session_state or not st.session_state.user_email:
+    cookie_email = cookies.get("user_email")
+    if cookie_email:
+        st.session_state.user_email = cookie_email
+    else:
+        st.session_state.user_email = None
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+if "is_new_chat" not in st.session_state:
+    st.session_state.is_new_chat = True
+if "edit_index" not in st.session_state:
+    st.session_state.edit_index = -1
+if "edit_mode" not in st.session_state:
+    st.session_state.edit_mode = False
+
 # === Load Secrets ===
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
@@ -33,34 +69,6 @@ oauth = OAuth2Component(
     authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
     token_endpoint="https://oauth2.googleapis.com/token"
 )
-
-# === Cookie Manager Initialization (robust, session-only cookies) ===
-cookies = EncryptedCookieManager(
-    prefix="",
-    password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
-)
-if not cookies.ready():
-    st.stop()  # Wait until cookies are ready!
-
-# === Session Initialization ===
-if "user_email" not in st.session_state or not st.session_state.user_email:
-    cookie_email = cookies.get("user_email")
-    if cookie_email:
-        st.session_state.user_email = cookie_email
-    else:
-        st.session_state.user_email = None
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "current_chat_id" not in st.session_state:
-    st.session_state.current_chat_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-if "is_new_chat" not in st.session_state:
-    st.session_state.is_new_chat = True
-if "edit_index" not in st.session_state:
-    st.session_state.edit_index = -1
-if "edit_mode" not in st.session_state:
-    st.session_state.edit_mode = False
 
 # === Utility Functions ===
 def generate_chat_title(text, max_len=40):
@@ -107,7 +115,6 @@ if st.session_state.user_email is None:
         try:
             idinfo = id_token.verify_oauth2_token(result["token"]["id_token"], grequests.Request(), GOOGLE_CLIENT_ID)
             st.session_state.user_email = idinfo["email"]
-            # Store session-only cookie (expires=None)
             cookies["user_email"] = idinfo["email"]
             cookies.save()
             st.rerun()
@@ -129,15 +136,6 @@ with col2:
         st.rerun()
 
 st.sidebar.success(f"Logged in as {st.session_state.user_email}")
-if st.sidebar.button("Logout"):
-    # Clear all session state
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    # Remove cookie
-    cookies["user_email"] = ""
-    cookies.save()
-    # Rerun to show login screen
-    st.rerun()
 
 # === Sidebar Options ===
 with st.sidebar:
@@ -159,7 +157,6 @@ with st.sidebar:
             if st.button("🗑️", key=f"del_chat_{i}"):
                 delete_chat(chat["chat_id"])
                 st.cache_data.clear()
-                # If deleting the current chat, clear session state for main panel
                 if chat["chat_id"] == st.session_state.current_chat_id:
                     st.session_state.messages = []
                     st.session_state.current_chat_id = ""
