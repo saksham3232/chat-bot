@@ -1,22 +1,23 @@
 import streamlit as st
-import streamlit.components.v1 as components
+from streamlit_cookies_manager import EncryptedCookieManager
+import firebase_admin
+from firebase_admin import credentials, firestore
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from datetime import datetime
 from groq import Groq
-import firebase_admin
-from firebase_admin import credentials, firestore
 from streamlit_oauth import OAuth2Component
-from streamlit_cookies_manager import EncryptedCookieManager  # <-- NEW IMPORT
 
 # === Load Secrets ===
 GROQ_API_KEY = st.secrets["GROQ"]["api_key"]
 client = Groq(api_key=GROQ_API_KEY)
 
-# === Firebase Initialization ===
+# === Firebase Initialization (robust) ===
 if not firebase_admin._apps:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
+else:
+    firebase_admin.get_app()
 
 db = firestore.client()
 
@@ -32,16 +33,17 @@ oauth = OAuth2Component(
     token_endpoint="https://oauth2.googleapis.com/token"
 )
 
-# === Cookie Manager Initialization ===
+# === Cookie Manager Initialization (robust) ===
 cookies = EncryptedCookieManager(
     prefix="",
     password=st.secrets.get("COOKIE_PASSWORD", "your-default-password"),
 )
-cookies.ready()
+if not cookies.ready():
+    st.stop()  # Wait until cookies are ready!
 
 # === Session Initialization ===
 if "user_email" not in st.session_state or not st.session_state.user_email:
-    if "user_email" in cookies and cookies["user_email"]:
+    if cookies.get("user_email"):
         st.session_state.user_email = cookies["user_email"]
     else:
         st.session_state.user_email = None
@@ -62,7 +64,6 @@ if "edit_mode" not in st.session_state:
 if st.session_state.user_email is None:
     st.set_page_config(page_title="Login", layout="centered")
     st.markdown("<h2 style='text-align:center;'>🔐 Welcome to the Chatbot</h2>", unsafe_allow_html=True)
-
     st.markdown("<p style='text-align:center;'>Please login with Google to continue</p>", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -102,7 +103,7 @@ if st.sidebar.button("Logout"):
     cookies["user_email"] = ""  # <-- CLEAR THE COOKIE
     st.rerun()
 
-# === Utility Functions ===
+# === Utility Functions (unchanged) ===
 def generate_chat_title(text, max_len=40):
     first_line = text.strip().split("\n")[0]
     return first_line if len(first_line) <= max_len else first_line[:max_len - 3] + "..."
@@ -125,6 +126,8 @@ def load_chats():
 
 def delete_chat(chat_id):
     db.collection("chats").document(f"{st.session_state.user_email}_{chat_id}").delete()
+
+# ... (rest of your app logic remains unchanged)
 
 # === Sidebar Options ===
 with st.sidebar:
