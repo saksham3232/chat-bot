@@ -62,7 +62,7 @@ Open your browser to the URL Streamlit provides (usually [http://localhost:8501]
 
 ## Environment Variables
 
-- `GROQ_API_KEY` – Your Groq API key
+- `GROQ_API_KEY` – Your Groq API key.
 
 
 ---
