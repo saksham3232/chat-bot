@@ -60,6 +60,9 @@ Open your browser to the URL Streamlit provides (usually [http://localhost:8501]
 └── README.md         # Project info
 ```
 
+## Environment Variables
+
+- `GROQ_API_KEY` – Your Groq API key.
 
 
 ---
